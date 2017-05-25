@@ -31,14 +31,21 @@ Copyright (c) 2015, Intel Corporation. All rights reserved.
 #include "list.h"
 
 /*New protocol*/
-struct bmp_data {
+struct raw_data {
     unsigned int data_width;
     unsigned int data_height;
     unsigned int data_depth;
     unsigned int data_len;
     char *data_buffer;
     struct list_head list;
+    //char name[100];
 };
+
+struct file_names{
+    struct list_head list;
+    char name[100];
+};
+
 
 enum mem_block_addr_e {
     MEM_BLOCK_BASE 	  = 0x3f000000,
@@ -46,7 +53,7 @@ enum mem_block_addr_e {
     MEM_BLOCK_2_OFFSET    = 0x00300000,
     MEM_BLOCK_3_OFFSET    = 0x00600000,
     MEM_BLOCK_4_OFFSET    = 0x00900000,
-} mem_block_addr_t;
+} mem_block_addr_t __attribute__((unused));
 
 static enum index_block_e {
     BLOCK_INDEX0 = 0,
@@ -54,7 +61,7 @@ static enum index_block_e {
     BLOCK_INDEX2,
     BLOCK_INDEX3,
     BLOCK_INDEX4,
-} index_block_t;
+} index_block_t __attribute__((unused));
 
 static enum reg_index_e {
     REG_INDEX0	 = 0,
@@ -66,7 +73,7 @@ static enum reg_index_e {
     REG_INDEX6,
     REG_INDEX7,
     REG_INDEX8,
-} reg_index_t;
+} reg_index_t __attribute__((unused));
 
 static enum io_status_e{
     IOS_PS_BLOCK1_WRITING_OVER = 0xf1,
@@ -78,11 +85,10 @@ static enum io_status_e{
     IOS_PS_BLOCK3_READING_OVER = 0xf6,
     IOS_PL_BLOCK4_WRITING_OVER = 0xf7,
     IOS_PS_BLOCK4_READING_OVER = 0xf8,
-} io_status_t;
+} io_status_t __attribute__((unused));
 
 /*lib linux*/
 //extern char *loadJpg(char* Name);
-char *loadJpg(char* Name, struct bmp_data *bmp_data); 
-
+char *loadJpg(char* Name, struct raw_data *raw_data);
 
 #endif

@@ -5,10 +5,10 @@
 #include <string.h>
 #include "jpeglib.h"
 #include "uio.h"
-#pragma comment(lib,"jpeg.lib")
+//#pragma comment(lib,"jpeg.lib")
 
 
-char *loadJpg(char* Name, struct bmp_data *bmp_data) {
+char *loadJpg(char* Name, struct raw_data *node) {
   unsigned char a, r, g, b;
   int width, height, depth;
   struct jpeg_decompress_struct cinfo;
@@ -57,14 +57,18 @@ char *loadJpg(char* Name, struct bmp_data *bmp_data) {
         g = r;
         b = r;
       }
+#if 1
+      /*Our source pics are binary data, and we need clear the reset low 24 bits*/
+      g=0;
+      r=0;
+#endif
       //printf("r = %d, g = %d, b = %d!\n",r,g,b);
       *(pDummy++) = b;
-      *(pDummy++) = 0;
-      *(pDummy++) = 0;
-      *(pDummy++) = 0;
+      *(pDummy++) = g;
+      *(pDummy++) = r;
+      *(pDummy++) = a;
     }
   }
-
   //fwrite(pTest,1,width*height*4,outfile);
 
   fclose(infile);
@@ -77,11 +81,11 @@ char *loadJpg(char* Name, struct bmp_data *bmp_data) {
   //Height = height;
   //Width = width;
   //Depth = 32;
-  bmp_data->data_width=width;
-  bmp_data->data_height=height;
-  bmp_data->data_depth=depth;
-  bmp_data->data_len=width*height*4;
-  bmp_data->data_buffer=(char *)pTest;
+  node->data_width=width;
+  node->data_height=height;
+  node->data_depth=depth;
+  node->data_len=width*height*4;
+  node->data_buffer=(char *)pTest;
   return (char *)pTest;
 }
 

@@ -1,6 +1,6 @@
 program := arm_bin
 
-arm_src_dir :=$(PWD)
+arm_src_dir :=$(PWD)/src
 arm_out_dir :=$(PWD)/out
 
 $(info arm_out_dir=$(arm_out_dir))
