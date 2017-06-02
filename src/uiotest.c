@@ -157,9 +157,9 @@ static void rm_first_node(struct list_head *head)
 {
     if( head->next != NULL ){
 	struct raw_data *node = list_entry(head->next,struct raw_data,list);
+	list_del_init(head->next);
 	free(node->data_buffer);
 	free(node);
-	list_del_init(head->next);
     }
 }
 
@@ -175,6 +175,8 @@ static void rm_first_node_name(struct list_head *head)
 {
     if( head->next != NULL ){
 	struct file_names *node = list_entry(head->next,struct file_names,list);
+	list_del_init(head->next);
+	//list_del(head->next);
 	free(node);
     }
 }
@@ -192,6 +194,14 @@ void writeData(int offset)
 
 	char *buffer = node->data_buffer;
 	unsigned int size = node->data_len;
+#if 1
+    struct list_head *plist,*pnode;
+    list_for_each_safe(plist,pnode,&data_list_h){
+	struct raw_data *node = list_entry(plist,struct raw_data,list);    
+	uio_print("Write List file=%s\n",node->name);
+    }
+#endif
+
 
 	if (size == 0)
 	{
@@ -216,6 +226,7 @@ void writeData(int offset)
 void readData(int offset,int size)
 {
     char name[100];
+    DIR *tmp_dir;
     char * bufferAddr = memBaseAddr + offset;
     if (size == 0)
     {
@@ -228,20 +239,33 @@ void readData(int offset,int size)
 	return;
     }
     uio_print("read data from 0x%p size 0x%x \n",bufferAddr, size);
+#if 1
+    struct list_head *plist,*pnode;
+    list_for_each_safe(plist,pnode,&bakdata_list_h){
+	struct file_names *node = list_entry(plist,struct file_names,list);    
+	uio_print("Read list file=%s\n",node->name);
+    }
+#endif
 
 #if 1
     char *out_dir="feature_out/";
     char out_path[120];
     struct file_names *node = get_first_node_name(&bakdata_list_h);
-    if(node == NULL ){
+    if( node == NULL ){
+	uio_color_print(YELLOW,"NO name file size 0x%x(*4bytes) \n",size>>2);
 	return;
     }
-    mkdir(out_dir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    uio_color_print(YELLOW,"name %s file size 0x%x(*4bytes) \n",node->name,size>>2);
+    if( ( tmp_dir = opendir(out_path)) == NULL ){
+	mkdir(out_dir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    }
+    closedir(tmp_dir);
+    memset(name,0,100);
     memcpy(name,node->name,strlen(node->name));
     strcat(name,".feature");
     memcpy(out_path,out_dir,strlen(out_dir));
     strcat(out_path,name);
-    FILE *fp=fopen(out_path, "wa+");
+    FILE *fp=fopen(out_path, "w+");
 
     if(fp!=0)
     {
@@ -288,7 +312,6 @@ void *Ps_send_handle (void *arg)
     char pl_rd_over;
 
     uio_print("init \n");
-    parse_each_file();
     while(1)
     {
 	sleep(1);
@@ -335,7 +358,7 @@ void *Ps_recv_handle(void *arg)
     uio_print("init \n");
     while(1)
     {
-	sleep(2);
+	sleep(1);
 #if 0
 	uio_print("index0=0x%x.index1=0x%x.index2=0x%x.index3=0x%x.index4=0x%x\n",\
 			    					mapped[REG_INDEX0],\
@@ -371,18 +394,21 @@ void *Ps_recv_handle(void *arg)
     }
 }
 
-static void parse_each_file()
+static void parse_each_file(char *sdir)
 {
     //char outfile_name[30];
-    char cur_dir[200];
+    char source_dir[100];
+    char img_path[150];
     DIR *dir;
     struct dirent *ptr;
     int index=0;
-
-    memset(cur_dir,'\0',sizeof(cur_dir));
-    getcwd(cur_dir,999);
-    uio_print("Current dir is : %s\n",cur_dir);
-    if ((dir=opendir(cur_dir)) == NULL)
+    memset(source_dir,'\0',sizeof(source_dir));
+    if( sdir==NULL ){
+	getcwd(source_dir,999);
+    }else
+	memcpy(source_dir,sdir,strlen(sdir));
+    uio_print("Pics Source dir is : %s\n",source_dir);
+    if ((dir=opendir(source_dir)) == NULL)
     {
 	perror("Open dir error...");
 	exit(1);
@@ -392,23 +418,31 @@ static void parse_each_file()
 	    continue;
 	else if(ptr->d_type == 8)    ///file
 	{
-	    //strcpy(img_path[img_num],cur_dir);
-	    //strcat(img_path[img_num++],ptr->d_name);
+	    memset(img_path,0,150);
+	    strcpy(img_path,source_dir);
+	    strcat(img_path,ptr->d_name);
 	    if(strstr(ptr->d_name,".jpg")!=NULL || (strstr(ptr->d_name,".jpeg"))!=NULL ){
-		uio_print("Load file[%d] is : %s\n",index++,ptr->d_name);
+		uio_print("Load file[%d] is : %s\n",index++,img_path);
 		//strncpy(outfile_name,ptr->d_name,strlen(ptr->d_name)-strlen(".jpg"));
 		//strcat(outfile_name,".bmp");
 		struct raw_data *data = malloc(sizeof(struct raw_data));
 		struct file_names *name_node = malloc(sizeof(struct file_names));
+		memset(data->name,0,sizeof(data->name));
+		memset(name_node->name,0,sizeof(name_node->name));
 		/*load pic attrs*/
-		char *buff = loadJpg((char *)ptr->d_name,data);
+		char *buff = loadJpg((char *)img_path,data);
+		if( buff==NULL ){
+		    continue;
+		}
 		data->data_buffer=buff;
 		memcpy(name_node->name,ptr->d_name,strlen(ptr->d_name)-strlen(".jpg"));
+		memcpy(data->name,ptr->d_name,strlen(ptr->d_name)-strlen(".jpg"));
 		list_add(&data->list, &data_list_h);
 		list_add(&name_node->list, &bakdata_list_h);
 	    }
 	}
     }
+    closedir(dir);
 }
 
 int main(int argc, char *argv[]) {
@@ -423,6 +457,8 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Bad size: %d\n", size);
     exit(1);
   }
+
+  parse_each_file(argv[1]);
 
   fd = open("/dev/uio1", O_RDWR);
   if (fd < 0) {

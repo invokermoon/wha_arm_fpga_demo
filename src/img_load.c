@@ -19,7 +19,7 @@ char *loadJpg(char* Name, struct raw_data *node) {
   JSAMPARRAY pJpegBuffer;       /* Output row buffer */
   int row_stride;       /* physical row width in output buffer */
   if ((infile = fopen(Name, "rb+")) == NULL) {
-    printf("1can't open %s\n", Name);
+    printf("[%s]can't open %s\n", __func__,Name);
     return 0;
   }
   printf("infile= %s \n",Name);

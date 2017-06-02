@@ -38,12 +38,12 @@ struct raw_data {
     unsigned int data_len;
     char *data_buffer;
     struct list_head list;
-    //char name[100];
+    char name[60];
 };
 
 struct file_names{
     struct list_head list;
-    char name[100];
+    char name[60];
 };
 
 

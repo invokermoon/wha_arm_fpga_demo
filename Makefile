@@ -30,7 +30,7 @@ $(arm_out_dir)/%.o: $(arm_src_dir)/%.c
 	    $(CC) -o $@ -c $< $(CFLAGS) $(INCLUDE)
 
 clean:
-	    rm $(OBJS) $(program) -f
+	    rm $(OBJS) $(program) $(arm_out_dir) -rf
 
 #install: $(program)
 #	    cp $(program) ./bin/
