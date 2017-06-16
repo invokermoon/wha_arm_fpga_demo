@@ -26,6 +26,8 @@
 /*uio*/
 #include "uio.h"
 #include "list.h"
+#include "camera.h"
+
 
 // modes
 #define bool int
@@ -80,7 +82,9 @@ struct CaptureArgs {
 /*Function declartion*/
 int ParseInput(char *iString);
 int ReadDMA(int p1,int p2,char *p3);
+#ifndef CAMERA_EN
 static void parse_each_file();
+#endif
 
 #if 0
 /* Read 1 character - echo defines echo mode */
@@ -194,14 +198,13 @@ void writeData(int offset)
 
 	char *buffer = node->data_buffer;
 	unsigned int size = node->data_len;
-#if 1
+#ifdef CAMERA_EN
     struct list_head *plist,*pnode;
     list_for_each_safe(plist,pnode,&data_list_h){
 	struct raw_data *node = list_entry(plist,struct raw_data,list);    
 	uio_print("Write List file=%s\n",node->name);
     }
 #endif
-
 
 	if (size == 0)
 	{
@@ -394,6 +397,7 @@ void *Ps_recv_handle(void *arg)
     }
 }
 
+#ifndef CAMERA_EN
 static void parse_each_file(char *sdir)
 {
     //char outfile_name[30];
@@ -444,6 +448,58 @@ static void parse_each_file(char *sdir)
     }
     closedir(dir);
 }
+#endif
+
+int regs_init()
+{
+    mapped[REG_INDEX0]=184;
+    //mapped[REG_INDEX1]=data->data_len;
+    mapped[REG_INDEX1]=2452;
+    mapped[REG_INDEX7]=0;
+    sleep(1);
+    return 0;
+}
+
+int capture_frame()
+{
+    camera_t* camera = camera_open("/dev/video0", WIDTH, HEIGHT);
+    if(camera_open==NULL){
+	uio_print("camera open error\n");
+	return 0;
+    }
+    camera_init(camera);
+    camera_start(camera);
+
+    struct timeval timeout;
+    timeout.tv_sec = 100;
+    timeout.tv_usec = 0;
+    /* skip 5 frames for booting a cam */
+    int i = 0;
+    sleep(1);
+    /*just for yuv*/
+    for (i = 0; i < 4; i++) {
+	camera_frame(camera, timeout);
+	char* rgb = yuyv2raw(camera->head.start, camera->width*camera->height);
+	if(rgb==NULL){
+	    printf("[%s]:raw from camera is null\n",__func__);
+	    continue;
+	}
+	struct raw_data *data=malloc(sizeof(struct raw_data));
+	data->data_buffer=rgb;
+	data->data_width=WIDTH;
+	data->data_height=HEIGHT;
+	data->data_len=WIDTH*HEIGHT*4;
+	list_add(&data->list,&data_list_h);
+
+	struct file_names *name_node = malloc(sizeof(struct file_names));
+	sprintf(name_node->name,"camera_feature%d",i);
+	list_add(&name_node->list, &bakdata_list_h);
+    }
+    camera_stop(camera);
+    camera_finish(camera);
+    camera_close(camera);
+    return 0;
+}
 
 int main(int argc, char *argv[]) {
 
@@ -458,7 +514,11 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
+#ifndef CAMERA_EN
   parse_each_file(argv[1]);
+#else
+  capture_frame();
+#endif
 
   fd = open("/dev/uio1", O_RDWR);
   if (fd < 0) {
@@ -486,6 +546,8 @@ int main(int argc, char *argv[]) {
   }
   memBaseAddr = (char *)map_addrCt;
   //image_ReadAddr = memBaseAddr + WRITE_SIZE;
+
+  regs_init();
 
   err = pthread_create(&p_tid[0], NULL, &Ps_send_handle,  (void*)&ThreadsExit);
   if (err != 0)

@@ -26,70 +26,52 @@ Copyright (c) 2015, Intel Corporation. All rights reserved.
 *ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 *POSSIBILITY OF SUCH DAMAGE.
 */
-#ifndef _UIO_H_
-#define _UIO_H_
+#ifndef _CAMERA_H_
+#define _CAMERA_H_
+#include "uio.h"
 #include "list.h"
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <linux/videodev2.h>
 
-/*Golabl Config*/
+#define YUV_ENABLE
+#define WIDTH	640	
+#define HEIGHT	480 
 
-/*New protocol*/
-struct raw_data {
-    unsigned int data_width;
-    unsigned int data_height;
-    unsigned int data_depth;
-    unsigned int data_len;
-    char *data_buffer;
-    struct list_head list;
-    char name[60];
-};
 
-struct file_names{
-    struct list_head list;
-    char name[60];
-};
+typedef struct {
+    uint8_t* start;
+    size_t length;
+} buffer_t;
 
-enum mem_block_addr_e {
-    MEM_BLOCK_BASE 	  = 0x3f000000,
-    MEM_BLOCK_1_OFFSET    = 0x00000000,
-    MEM_BLOCK_2_OFFSET    = 0x00300000,
-    MEM_BLOCK_3_OFFSET    = 0x00600000,
-    MEM_BLOCK_4_OFFSET    = 0x00900000,
-} mem_block_addr_t __attribute__((unused));
+typedef struct {
+    int fd;
+    uint32_t width;
+    uint32_t height;
+    size_t buffer_count;
+    buffer_t* buffers;
+    buffer_t head;
+} camera_t;
 
-static enum index_block_e {
-    BLOCK_INDEX0 = 0,
-    BLOCK_INDEX1 = 1,
-    BLOCK_INDEX2,
-    BLOCK_INDEX3,
-    BLOCK_INDEX4,
-} index_block_t __attribute__((unused));
 
-static enum reg_index_e {
-    REG_INDEX0	 = 0,
-    REG_INDEX1,//24 bit including flag+Data Length
-    REG_INDEX2,
-    REG_INDEX3,
-    REG_INDEX4,
-    REG_INDEX5,
-    REG_INDEX6,
-    REG_INDEX7,
-    REG_INDEX8,
-} reg_index_t __attribute__((unused));
 
-static enum io_status_e{
-    IOS_PS_BLOCK1_WRITING_OVER = 0xf1,
-    IOS_PL_BLOCK1_READING_OVER = 0xf2,
-    IOS_PS_BLOCK2_WRITING_OVER = 0xf3,
-    IOS_PL_BLOCK2_READING_OVER = 0xf4,
+//int capture_frame();
+#ifndef YUV_ENABLE
+int read_frame (camera_t *camera);
+#endif
+char *yuyv2raw(unsigned char * yuv, int pixels);
+uint8_t *yuyv2rgb_gray(unsigned char * yuv, int pixels);
+int camera_frame(camera_t* camera, struct timeval timeout);
+void camera_close(camera_t* camera);
+void camera_finish(camera_t* camera);
+void camera_start(camera_t* camera);
+void camera_stop(camera_t* camera);
+void camera_init(camera_t* camera) ;
+camera_t* camera_open(const char * device, uint32_t width, uint32_t height);
 
-    IOS_PL_BLOCK3_WRITING_OVER = 0xf5,
-    IOS_PS_BLOCK3_READING_OVER = 0xf6,
-    IOS_PL_BLOCK4_WRITING_OVER = 0xf7,
-    IOS_PS_BLOCK4_READING_OVER = 0xf8,
-} io_status_t __attribute__((unused));
 
-/*lib linux*/
-//extern char *loadJpg(char* Name);
-char *loadJpg(char* Name, struct raw_data *raw_data);
 
 #endif
