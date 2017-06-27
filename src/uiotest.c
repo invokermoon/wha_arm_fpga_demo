@@ -37,6 +37,7 @@
 void *map_addr,*map_addrCt;
 volatile unsigned int *mapped;
 int ThreadsExit=1;
+int sockfd=0;
 
 #define WRITE_SIZE (8 * 1024 * 1024)
 #define BUFFER_SIZE (32 * 1024 * 1024)
@@ -201,7 +202,7 @@ void writeData(int offset)
 #ifdef CAMERA_EN
     struct list_head *plist,*pnode;
     list_for_each_safe(plist,pnode,&data_list_h){
-	struct raw_data *node = list_entry(plist,struct raw_data,list);    
+	struct raw_data *node = list_entry(plist,struct raw_data,list);
 	uio_print("Write List file=%s\n",node->name);
     }
 #endif
@@ -250,7 +251,7 @@ void readData(int offset,int size)
     }
 #endif
 
-#if 1
+#if 0
     char *out_dir="feature_out/";
     char out_path[120];
     struct file_names *node = get_first_node_name(&bakdata_list_h);
@@ -290,7 +291,22 @@ void readData(int offset,int size)
 #else
     char readbuffer[size*2];
     memcpy(readbuffer,bufferAddr,size);
-    uio_print("Data:%s\n",readbuffer);
+    //uio_print("Data:%s\n",readbuffer);
+    static unsigned int index_num=0;
+    socket_data_t *skt_data=malloc(sizeof(socket_data_t));
+    skt_data->head=0x8888;
+    skt_data->index=index_num;
+    skt_data->data_len=size;
+    skt_data->end=0x8888;
+    index_num++;
+    if(size < (4096*4096))
+	memcpy(skt_data->data,bufferAddr,size);
+    else
+	uio_print("size if error\n");
+    size_t write_size=write(sockfd,skt_data,sizeof(socket_data_t));
+    if(write_size == sizeof(socket_data_t))
+	uio_print("size write success %d,size=%d\n",write_size,size);
+    free(skt_data);
 #endif
     config_rd_over_regs();
 }
@@ -463,7 +479,8 @@ int regs_init()
 int capture_frame()
 {
     camera_t* camera = camera_open("/dev/video0", WIDTH, HEIGHT);
-    if(camera_open==NULL){
+
+    if(camera==NULL){
 	uio_print("camera open error\n");
 	return 0;
     }
@@ -498,6 +515,60 @@ int capture_frame()
     camera_stop(camera);
     camera_finish(camera);
     camera_close(camera);
+    return 0;
+}
+
+void sig_pipe(int signo)
+{
+    uio_print("catch a signal...\n");
+    sleep(3);
+    if(signo == SIGTSTP){
+	close(sockfd);
+    }
+    exit(-1);
+}
+
+typedef void (*sighandler_t)(int);
+
+int socket_init(int argc, char **argv)
+{
+    struct sockaddr_in s_addr;
+    unsigned int port;
+    char ip_addr[20];
+
+    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1){
+        perror("socket");
+        exit(errno);
+    }else
+        uio_print("socket create success!\n");
+
+    sighandler_t ret;
+    ret = signal(SIGTSTP,sig_pipe);
+    if(ret<0){
+	uio_print("Signal connect error\n");
+    }
+
+    memset(ip_addr,0,sizeof(ip_addr));
+    if(argc==4){
+	if(argv[3])
+	    port = atoi(argv[3]);
+	if(argv[2])
+	    memcpy(ip_addr,argv[2],strlen(argv[2]));
+    }
+    uio_print("IP=%s,port=%d\n",ip_addr,port);
+    bzero(&s_addr, sizeof(s_addr));
+    s_addr.sin_family = AF_INET;
+    s_addr.sin_port = htons(port);
+    if (inet_aton(ip_addr, (struct in_addr *)&s_addr.sin_addr.s_addr) == 0) {
+	perror(ip_addr);
+	exit(errno);
+	}
+    if(connect(sockfd,(struct sockaddr*)&s_addr,sizeof(struct sockaddr)) == -1){
+        perror("connect");
+        exit(errno);
+    }else
+        uio_print("conncet success!\n");
+
     return 0;
 }
 
@@ -549,6 +620,8 @@ int main(int argc, char *argv[]) {
 
   regs_init();
 
+  socket_init(argc, argv);
+
   err = pthread_create(&p_tid[0], NULL, &Ps_send_handle,  (void*)&ThreadsExit);
   if (err != 0)
   {
@@ -583,5 +656,6 @@ int main(int argc, char *argv[]) {
 
   close(fd);
   close(mfd);
+  close(sockfd);
   return 0;
 }

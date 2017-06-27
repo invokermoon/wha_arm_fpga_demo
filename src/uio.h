@@ -88,6 +88,15 @@ static enum io_status_e{
     IOS_PS_BLOCK4_READING_OVER = 0xf8,
 } io_status_t __attribute__((unused));
 
+
+typedef struct socket_data{
+    int head;
+    int index;
+    unsigned int data_len;
+    unsigned char data[4096*4096];
+    int end;
+} socket_data_t;
+
 /*lib linux*/
 //extern char *loadJpg(char* Name);
 char *loadJpg(char* Name, struct raw_data *raw_data);
