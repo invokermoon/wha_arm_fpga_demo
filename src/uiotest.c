@@ -601,6 +601,8 @@ int cpy_mem_to_file(char *out_name, int offset,int total_len)
 int cpy_file_to_mem(char *nname, int offset)
 {
     int ifd=0;
+    if(!nname)
+	return 0;
 
     ifd = open(nname,O_RDWR);
     if(ifd < 0){
@@ -623,9 +625,10 @@ int cpy_file_to_mem(char *nname, int offset)
 
     memcpy(memBaseAddr+offset,p,tmp_total_len);
 
-    uio_print("Write data over,tmp_total_len=%d,0x%x\n",tmp_total_len,tmp_total_len);
+    uio_print("Write data over,src_file=%s,tmp_total_len=%d,0x%x\n",nname,tmp_total_len,tmp_total_len);
 
     memset(p,0,1024*1024*6);
+    free(p);
     return 0;
 }
 
@@ -633,131 +636,48 @@ int sample_demo_test()
 {
     /*test param*/
     mapped[REG_INDEX0]=0;
-#if 0
-  char *p=malloc(1024*1024*10);
-  memset(memBaseAddr,0,MEM_BLOCK_4_OFFSET);
-  char *name="fuckyou";
-  memcpy(memBaseAddr,name,strlen(name));
-  memcpy(p,memBaseAddr,MEM_BLOCK_4_OFFSET);
-
-  return 0;
-#endif
-    char out_name[40];
 
     int i=0;
-    for(i=0;i<2;i++){
-	memset(out_name,0,40);
-	int ifd=0;
+    cpy_file_to_mem("data_src/wb_fixparam.bin",0x2000000);
+    cpy_file_to_mem("data_src/input_data.bin",0x2400000);
 
-	if(i==1){
-	    char *nname="data_src/input_data.bin";
-	    ifd = open(nname,O_RDWR);
-	}else if(i==0){
-	    char *nname="data_src/wb_fixparam.bin";
-	    ifd = open(nname,O_RDWR);
-	}
-
-	int read_len=0;
-	int tmp_total_len=0;
-	char rbuf[2048];
-	char *p=malloc(1024*1024*6);
-
-	lseek(ifd,0,SEEK_SET);
-	uio_print("read file starting...\n");
-	while((read_len = read(ifd,rbuf,1024))){
-	    memcpy(p+tmp_total_len,rbuf,read_len);
-	    tmp_total_len+=read_len;
-	    memset(rbuf,0,2048);
-	}
-
-	if(i==0){
-	    memcpy(memBaseAddr+0x2000000,p,tmp_total_len);
-	}else if(i==1){
-	    memcpy(memBaseAddr+0x2400000,p,tmp_total_len);
-	}
-
-	uio_print("Write data over,tmp_total_len=%d,0x%x\n",tmp_total_len,tmp_total_len);
-
-	memset(p,0,1024*1024*6);
-    }
-
-    memcpy(out_name,"param_data",strlen("param_data"));
-    strcat(out_name,".out");
-
-
-    uio_print("Write data and parameters over...\n");
     sleep(1);
-
-    //TODO
-    return 0;
-
     mapped[REG_INDEX0]=1;
 
     uio_print("waiting for fpga hanlding...\n");
 
-    sleep(1);
-    uio_print("Ready to get results...\n");
-
     while(1){
 	for(i=0;i<10;i++){
 	    printf("map_reg[%d]=0x%x  ",i,mapped[i]);
-      }
-      printf("\n");
+	}
+	printf("\n");
 
-      char *rd_p=(char *)mapped;
-      char pl_wr_over_flag = 0;
-      if(rd_p[0] != 0x08 ){
-	  uio_print("Index param is error\n");
-	  return 0;
-      }
-      int index_num=rd_p[1];
-      int index_bytes=rd_p[2];
-      uio_print("index_num=%d,index_bytes=%d\n",index_num,index_bytes);
-      for(i=0;i<10;i++){
-	  printf("map_reg[%d]=0x%x  ",i,mapped[i]);
-      }
-      printf("\n");
+	char *rd_p=(char *)mapped;
+	char pl_wr_over_flag = 0;
+	if(rd_p[0] != 0x08 ){
+	    uio_print("Index param is error\n");
+	    return 0;
+	}
+	int index_num=rd_p[1];
+	int index_bytes=rd_p[2];
+	uio_print("index_num=%d,index_bytes=%d\n",index_num,index_bytes);
 
+	for(i=0;i<index_num;i++){
+	    if( rd_p[4+i]==REG_INDEX2 ){
+		uio_print("Get the new flag...\n");
+		pl_wr_over_flag = rd_p[4+4*index_bytes+i*4];
+		//pl_wr_lens = (unsigned short )mapped[1+index_bytes+i];
+		break;
+	    }
+	}
+	uio_print("pl_wr_over_flag=0x%x\n",pl_wr_over_flag);
 
-      for(i=0;i<index_num;i++){
-	  if( rd_p[4+i]==REG_INDEX2 ){
-	      uio_print("Get the new flag...\n");
-	      pl_wr_over_flag = rd_p[4+4*index_bytes+i*4];
-	      //pl_wr_lens = (unsigned short )mapped[1+index_bytes+i];
-	      break;
-	  }
-      }
-      uio_print("pl_wr_over_flag=0x%x\n",pl_wr_over_flag);
-
-
-      if(pl_wr_over_flag==1){
-	  for(i=0;i<10;i++){
-	      printf("map_reg[%d]=0x%x   ",i,mapped[i]);
-	  }
-	  printf("\n");
-	  uio_print("out file name=%s\n",out_name);
-	  FILE *fp=fopen(out_name, "w+");
-
-	  if(fp!=0)
-	  {
-	      int total_len=7372800*2;
-	      fseek(fp, 0, SEEK_SET);    /* file pointer at the beginning of file */
-	      //size_t writeSize=fwrite((const void *)memBaseAddr,1,total_len>>1,fp);
-	      size_t writeSize=fwrite((const void *)memBaseAddr,1,total_len,fp);
-	      if (writeSize != total_len)
-	      {
-		  uio_print("write size %zd fail \n",writeSize);
-	      }else{
-		  uio_color_print(YELLOW,"Read Data size 0x%zx,%zd \n",writeSize,writeSize);
-	      }
-	      sleep(1);
-	      uio_color_print(YELLOW,"write over\n");
-	      fclose(fp);
-	  }
-	  break;
-      }
-      sleep(2);
-  }
+	if(pl_wr_over_flag==1){
+	    cpy_mem_to_file("param_data.out.bin",0x0,7372800*2);
+	    break;
+	}
+	sleep(2);
+    }
     return 0;
 }
 
@@ -892,6 +812,7 @@ int ParseInput(char *iString)
 		    break;
 		case TEST_CMD:
 		    sample_demo_test();
+		    break;
 
 		default :
 		    uio_print("unrecognized command\n");
