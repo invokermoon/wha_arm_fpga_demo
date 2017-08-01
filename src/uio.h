@@ -48,8 +48,17 @@ struct file_names{
     char name[60];
 };
 
+enum HASH_CMD_e {
+    ERROR_CMD,
+    READ_CMD,
+    WRITE_CMD,
+    WRITE_IMAGE_CMD,
+    READ_IMAGE_CMD,
+    TEST_CMD,
+};
+
 enum mem_block_addr_e {
-    MEM_BLOCK_BASE 	  = 0x3f000000,
+    MEM_BLOCK_BASE 	  = 0x20000000,
     MEM_BLOCK_1_OFFSET    = 0x00000000,
     MEM_BLOCK_2_OFFSET    = 0x00300000,
     MEM_BLOCK_3_OFFSET    = 0x00600000,

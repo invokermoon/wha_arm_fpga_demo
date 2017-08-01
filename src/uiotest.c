@@ -40,7 +40,7 @@ int ThreadsExit=1;
 int sockfd=0;
 
 #define WRITE_SIZE (8 * 1024 * 1024)
-#define BUFFER_SIZE (32 * 1024 * 1024)
+#define BUFFER_SIZE (64 * 1024 * 1024)
 
 /*Global list head*/
 LIST_HEAD(data_list_h);
@@ -229,8 +229,6 @@ void writeData(int offset)
 
 void readData(int offset,int size)
 {
-    char name[100];
-    DIR *tmp_dir;
     char * bufferAddr = memBaseAddr + offset;
     if (size == 0)
     {
@@ -244,14 +242,17 @@ void readData(int offset,int size)
     }
     uio_print("read data from 0x%p size 0x%x \n",bufferAddr, size);
 #if 1
+    /*print msg*/
     struct list_head *plist,*pnode;
     list_for_each_safe(plist,pnode,&bakdata_list_h){
-	struct file_names *node = list_entry(plist,struct file_names,list);    
+	struct file_names *node = list_entry(plist,struct file_names,list);
 	uio_print("Read list file=%s\n",node->name);
     }
 #endif
 
-#if 0
+#ifndef SOCKET_TRANSFER_EN
+    DIR *tmp_dir;
+    char name[100];
     char *out_dir="feature_out/";
     char out_path[120];
     struct file_names *node = get_first_node_name(&bakdata_list_h);
@@ -305,7 +306,7 @@ void readData(int offset,int size)
 	uio_print("size if error\n");
     size_t write_size=write(sockfd,skt_data,sizeof(socket_data_t));
     if(write_size == sizeof(socket_data_t))
-	uio_print("size write success %d,size=%d\n",write_size,size);
+	uio_print("size write success %zd,size=%d\n",write_size,size);
     free(skt_data);
 #endif
     config_rd_over_regs();
@@ -314,9 +315,10 @@ void readData(int offset,int size)
 int getInput(void)
 {
 	char iString[255];
+	printf("\nWaiting for Command:\n");
 	if(fgets(iString,200,stdin)!=NULL)
 	{
-	    return 1;
+	    return ParseInput(iString);
 	}
 	return 0;
 
@@ -345,7 +347,7 @@ void *Ps_send_handle (void *arg)
 	    if(rd_p[4+i]==REG_INDEX0){
 		/*high 8 bit + low 16 bits data_len*/
 		pl_rd_over = (char )mapped[1+index_bytes+i];
-		uio_print("pl_rd_over=0x%x\n",pl_rd_over);
+		//uio_print("pl_rd_over=0x%x\n",pl_rd_over);
 		break;
 	    }
 	}
@@ -530,6 +532,7 @@ void sig_pipe(int signo)
 
 typedef void (*sighandler_t)(int);
 
+#ifdef SOCKET_TRANSFER_EN
 int socket_init(int argc, char **argv)
 {
     struct sockaddr_in s_addr;
@@ -571,13 +574,342 @@ int socket_init(int argc, char **argv)
 
     return 0;
 }
+#endif
+
+int cpy_mem_to_file(char *out_name, int offset,int total_len)
+{
+    FILE *fp=fopen(out_name, "w+");
+
+    if(fp!=0)
+    {
+	fseek(fp, 0, SEEK_SET);    /* file pointer at the beginning of file */
+	//size_t writeSize=fwrite((const void *)memBaseAddr,1,total_len>>1,fp);
+	size_t writeSize=fwrite((const void *)memBaseAddr+offset,1,total_len,fp);
+	if (writeSize != total_len)
+	{
+	    uio_print("write size %zd fail \n",writeSize);
+	}else{
+	    uio_color_print(YELLOW,"Read Data size 0x%zx,%zd \n",writeSize,writeSize);
+	}
+	sleep(1);
+	uio_color_print(YELLOW,"write file %s over\n",out_name);
+	fclose(fp);
+    }
+    return 0;
+}
+
+int cpy_file_to_mem(char *nname, int offset)
+{
+    int ifd=0;
+
+    ifd = open(nname,O_RDWR);
+    if(ifd < 0){
+	uio_print("file don't exsit...\n");
+	return 0;
+    }
+
+    int read_len=0;
+    int tmp_total_len=0;
+    char rbuf[2048];
+    char *p=malloc(1024*1024*6);
+
+    lseek(ifd,0,SEEK_SET);
+    uio_print("read file starting...\n");
+    while((read_len = read(ifd,rbuf,1024))){
+	memcpy(p+tmp_total_len,rbuf,read_len);
+	tmp_total_len+=read_len;
+	memset(rbuf,0,2048);
+    }
+
+    memcpy(memBaseAddr+offset,p,tmp_total_len);
+
+    uio_print("Write data over,tmp_total_len=%d,0x%x\n",tmp_total_len,tmp_total_len);
+
+    memset(p,0,1024*1024*6);
+    return 0;
+}
+
+int sample_demo_test()
+{
+    /*test param*/
+    mapped[REG_INDEX0]=0;
+#if 0
+  char *p=malloc(1024*1024*10);
+  memset(memBaseAddr,0,MEM_BLOCK_4_OFFSET);
+  char *name="fuckyou";
+  memcpy(memBaseAddr,name,strlen(name));
+  memcpy(p,memBaseAddr,MEM_BLOCK_4_OFFSET);
+
+  return 0;
+#endif
+    char out_name[40];
+
+    int i=0;
+    for(i=0;i<2;i++){
+	memset(out_name,0,40);
+	int ifd=0;
+
+	if(i==1){
+	    char *nname="data_src/input_data.bin";
+	    ifd = open(nname,O_RDWR);
+	}else if(i==0){
+	    char *nname="data_src/wb_fixparam.bin";
+	    ifd = open(nname,O_RDWR);
+	}
+
+	int read_len=0;
+	int tmp_total_len=0;
+	char rbuf[2048];
+	char *p=malloc(1024*1024*6);
+
+	lseek(ifd,0,SEEK_SET);
+	uio_print("read file starting...\n");
+	while((read_len = read(ifd,rbuf,1024))){
+	    memcpy(p+tmp_total_len,rbuf,read_len);
+	    tmp_total_len+=read_len;
+	    memset(rbuf,0,2048);
+	}
+
+	if(i==0){
+	    memcpy(memBaseAddr+0x2000000,p,tmp_total_len);
+	}else if(i==1){
+	    memcpy(memBaseAddr+0x2400000,p,tmp_total_len);
+	}
+
+	uio_print("Write data over,tmp_total_len=%d,0x%x\n",tmp_total_len,tmp_total_len);
+
+	memset(p,0,1024*1024*6);
+    }
+
+    memcpy(out_name,"param_data",strlen("param_data"));
+    strcat(out_name,".out");
+
+
+    uio_print("Write data and parameters over...\n");
+    sleep(1);
+
+    //TODO
+    return 0;
+
+    mapped[REG_INDEX0]=1;
+
+    uio_print("waiting for fpga hanlding...\n");
+
+    sleep(1);
+    uio_print("Ready to get results...\n");
+
+    while(1){
+	for(i=0;i<10;i++){
+	    printf("map_reg[%d]=0x%x  ",i,mapped[i]);
+      }
+      printf("\n");
+
+      char *rd_p=(char *)mapped;
+      char pl_wr_over_flag = 0;
+      if(rd_p[0] != 0x08 ){
+	  uio_print("Index param is error\n");
+	  return 0;
+      }
+      int index_num=rd_p[1];
+      int index_bytes=rd_p[2];
+      uio_print("index_num=%d,index_bytes=%d\n",index_num,index_bytes);
+      for(i=0;i<10;i++){
+	  printf("map_reg[%d]=0x%x  ",i,mapped[i]);
+      }
+      printf("\n");
+
+
+      for(i=0;i<index_num;i++){
+	  if( rd_p[4+i]==REG_INDEX2 ){
+	      uio_print("Get the new flag...\n");
+	      pl_wr_over_flag = rd_p[4+4*index_bytes+i*4];
+	      //pl_wr_lens = (unsigned short )mapped[1+index_bytes+i];
+	      break;
+	  }
+      }
+      uio_print("pl_wr_over_flag=0x%x\n",pl_wr_over_flag);
+
+
+      if(pl_wr_over_flag==1){
+	  for(i=0;i<10;i++){
+	      printf("map_reg[%d]=0x%x   ",i,mapped[i]);
+	  }
+	  printf("\n");
+	  uio_print("out file name=%s\n",out_name);
+	  FILE *fp=fopen(out_name, "w+");
+
+	  if(fp!=0)
+	  {
+	      int total_len=7372800*2;
+	      fseek(fp, 0, SEEK_SET);    /* file pointer at the beginning of file */
+	      //size_t writeSize=fwrite((const void *)memBaseAddr,1,total_len>>1,fp);
+	      size_t writeSize=fwrite((const void *)memBaseAddr,1,total_len,fp);
+	      if (writeSize != total_len)
+	      {
+		  uio_print("write size %zd fail \n",writeSize);
+	      }else{
+		  uio_color_print(YELLOW,"Read Data size 0x%zx,%zd \n",writeSize,writeSize);
+	      }
+	      sleep(1);
+	      uio_color_print(YELLOW,"write over\n");
+	      fclose(fp);
+	  }
+	  break;
+      }
+      sleep(2);
+  }
+    return 0;
+}
+
+int HashInputCMD(char *s)
+{
+    if(s[0]=='r')
+	return READ_CMD;
+    if(s[0]=='w')
+	return WRITE_CMD;
+    if(s[0]=='I')
+	return WRITE_IMAGE_CMD;
+    if(s[0]=='L')
+	return READ_IMAGE_CMD;
+    if(s[0]=='T')
+	return TEST_CMD;
+    return 0;
+}
+
+int htoi(char s[])
+{
+    int i = 0;
+    int n = 0;
+    int digit = 0;
+
+    if(s[i]=='0')
+    {
+	++i;
+	if(s[i] == 'X'&& s[i] == 'x')
+	    ++i;
+    }
+    else
+    {
+	printf("it is not true\n");
+	exit(-1);
+    }
+
+    for(i=0; s[i]!='0'; i++)
+    {
+
+	if(s[i]<'9'&&s[i]>'0')
+	    digit = s[i]-'0';
+	else if(s[i]<'z'&&s[i]>'a')
+	    digit=s[i]-'a'+10;
+	else if(s[i]>'A'&&s[i]<'z')
+	    digit=s[i]-'A'+10;
+	else
+	    break;
+
+	n=n*16+digit;
+    }
+    return n;
+
+}
+
+int ParseInput(char *iString)
+{
+    //char iString[255];
+    const char delimiters[] = " ,";
+    char *token,*p1,*p2,*p3;
+    int i,j,Add,Length,tokenVal;
+    if(iString !=NULL)
+    {
+	token = strtok (iString, delimiters);
+	if (token !=NULL)
+	{
+	    tokenVal=HashInputCMD(token);
+	    uio_print(":\nToken %s  TokenVal %i\n",token,tokenVal);
+	}
+	else
+	    return 1;
+	if (tokenVal != 0 ){
+	    switch(tokenVal)
+	    {
+
+		case READ_CMD  :
+		    p1=strtok (NULL, delimiters);
+		    p2=strtok (NULL, delimiters);
+		    if((p1==NULL) | (p2==NULL))
+		    {
+			uio_print("%d %d need addres and length\n",atoi(p1),atoi(p2));
+			break;
+		    }
+		    Add=atoi(p1);
+		    Length=atoi(p2);
+		    uio_print("%d %d \n",Add,Length);
+		    for(i=0;i<Length;i++)
+		    {
+			printf("REG[%d]=%x ",Add+i,mapped[Add+i]);
+		    }
+		    printf("\n");
+		    break;
+		case WRITE_CMD  :
+		    p1=strtok (NULL, delimiters);
+		    p2=strtok (NULL, delimiters);
+		    if((p1==NULL) | (p2==NULL))
+		    {
+			uio_print("%d %d need addres and data\n",atoi(p1),atoi(p2));
+			break;
+		    }
+		    uio_print("%d %d \n",atoi(p1),atoi(p2));
+		    i=atoi(p1);
+		    j=atoi(p2);
+		    mapped[i]=j;
+		    break;
+		case WRITE_IMAGE_CMD  :
+		    p1=strtok (NULL, delimiters);
+		    p2=strtok (NULL, delimiters);
+		    if((p1==NULL) | (p2==NULL))
+		    {
+			uio_print("parameters error:[I file_name offset]\n");
+			break;
+		    }
+		    j=strtol(p2,NULL,16);
+		    uio_print("wrte file %s to address 0x%x\n",p1,j);
+		    cpy_file_to_mem(p1, j);
+
+		    break;
+		case READ_IMAGE_CMD  :
+		    p1=strtok (NULL, delimiters);
+		    p2=strtok (NULL, delimiters);
+		    p3=strtok (NULL, delimiters);
+		    if((p1==NULL) | (p2==NULL) | (p3==NULL))
+		    {
+			uio_print("parameters error:[L file_name offset lens]\n");
+			break;
+		    }
+		    j=strtol(p2,NULL,16);
+		    int len=strtol(p3,NULL,16);
+
+		    uio_print("read address 0x%x into file %s,size=0x%x\n",j,p1,len);
+		    cpy_mem_to_file(p1, j,len);
+		    break;
+		case TEST_CMD:
+		    sample_demo_test();
+
+		default :
+		    uio_print("unrecognized command\n");
+	    }
+	    return 0;
+	}
+	else
+	    return 1;
+    }
+    return 1;
+}
+
 
 int main(int argc, char *argv[]) {
 
   int fd,mfd,err;
 
   int size;
-  int imageSize = BUFFER_SIZE;
 
   size = 4095;
   if (size <= 0) {
@@ -586,7 +918,7 @@ int main(int argc, char *argv[]) {
   }
 
 #ifndef CAMERA_EN
-  parse_each_file(argv[1]);
+  //parse_each_file(argv[1]);
 #else
   capture_frame();
 #endif
@@ -608,19 +940,20 @@ int main(int argc, char *argv[]) {
 
 
   mfd = open("/dev/mem", O_RDWR);
-  map_addrCt = mmap(NULL, imageSize, PROT_READ | PROT_WRITE, MAP_SHARED, mfd, 0x3f000000);
+  map_addrCt = mmap(NULL, BUFFER_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, mfd, MEM_BLOCK_BASE);
 
   if (map_addrCt == MAP_FAILED) {
-      //printf("\nCant Map Callibration Tables \n");
       perror("Failed to mmap High memory");
       return 1;
   }
   memBaseAddr = (char *)map_addrCt;
-  //image_ReadAddr = memBaseAddr + WRITE_SIZE;
 
-  regs_init();
+  /*TODO*/
+  //regs_init();
 
+#ifdef SOCKET_TRANSFER_EN
   socket_init(argc, argv);
+#endif
 
   err = pthread_create(&p_tid[0], NULL, &Ps_send_handle,  (void*)&ThreadsExit);
   if (err != 0)
@@ -644,15 +977,15 @@ int main(int argc, char *argv[]) {
       printf("\n Begin Ps recv Thread\n");
   }
 
+  sleep(2);
   while(getInput()==0);
 
   ThreadsExit=0;
-  sleep(1);
 
   printf("\nExiting \n");
 
   munmap(map_addr, size);
-  munmap(map_addrCt, imageSize);
+  munmap(map_addrCt, BUFFER_SIZE);
 
   close(fd);
   close(mfd);

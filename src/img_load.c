@@ -22,7 +22,7 @@ char *loadJpg(char* Name, struct raw_data *node) {
     printf("[%s]can't open %s\n", __func__,Name);
     return 0;
   }
-  printf("infile= %s \n",Name);
+  //printf("infile= %s \n",Name);
 
   cinfo.err = jpeg_std_error(&jerr);
   jpeg_create_decompress(&cinfo);
