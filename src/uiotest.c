@@ -696,42 +696,6 @@ int HashInputCMD(char *s)
     return 0;
 }
 
-int htoi(char s[])
-{
-    int i = 0;
-    int n = 0;
-    int digit = 0;
-
-    if(s[i]=='0')
-    {
-	++i;
-	if(s[i] == 'X'&& s[i] == 'x')
-	    ++i;
-    }
-    else
-    {
-	printf("it is not true\n");
-	exit(-1);
-    }
-
-    for(i=0; s[i]!='0'; i++)
-    {
-
-	if(s[i]<'9'&&s[i]>'0')
-	    digit = s[i]-'0';
-	else if(s[i]<'z'&&s[i]>'a')
-	    digit=s[i]-'a'+10;
-	else if(s[i]>'A'&&s[i]<'z')
-	    digit=s[i]-'A'+10;
-	else
-	    break;
-
-	n=n*16+digit;
-    }
-    return n;
-
-}
-
 int ParseInput(char *iString)
 {
     //char iString[255];
@@ -758,6 +722,7 @@ int ParseInput(char *iString)
 		    if((p1==NULL) | (p2==NULL))
 		    {
 			uio_print("%d %d need addres and length\n",atoi(p1),atoi(p2));
+			uio_print("parameters error:[r reg_index reg_nums]\n");
 			break;
 		    }
 		    Add=atoi(p1);
@@ -775,6 +740,7 @@ int ParseInput(char *iString)
 		    if((p1==NULL) | (p2==NULL))
 		    {
 			uio_print("%d %d need addres and data\n",atoi(p1),atoi(p2));
+			uio_print("parameters error:[w reg_index value]\n");
 			break;
 		    }
 		    uio_print("%d %d \n",atoi(p1),atoi(p2));
@@ -815,7 +781,7 @@ int ParseInput(char *iString)
 		    break;
 
 		default :
-		    uio_print("unrecognized command\n");
+		    uio_print("unrecognized command.Cmds:r/w I/L\n");
 	    }
 	    return 0;
 	}
